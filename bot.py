@@ -2,6 +2,10 @@ import os
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
+import logging
+
+# === Log sozlamalari (Railway loglarda ko‘rinishi uchun) ===
+logging.basicConfig(level=logging.INFO)
 
 # === Sozlamalar ===
 BOT_TOKEN = os.getenv("BOT_TOKEN")  # Token Railway Variables orqali olinadi
@@ -14,7 +18,7 @@ CHANNEL_USERNAME = "@premum_uc_hizmati"
 SERVICES = {
     "premium": {
         "name": "Telegram Premium ⭐",
-        "tariffs": {"1oy": 52000, "3oy": 200000, "12oy": 400000}
+        "tariffs": {"1 oy": 52000, "3 oy": 200000, "12 oy": 400000}
     },
     "stars": {
         "name": "Telegram Stars ✨",
@@ -74,7 +78,12 @@ def start(message):
     kb.add(InlineKeyboardButton("✨ Telegram Stars", callback_data="service:stars"))
     kb.add(InlineKeyboardButton("💎 Mobile Legends", callback_data="service:mlbb"))
     kb.add(InlineKeyboardButton("🎮 PUBG UC", callback_data="service:uc"))
-    bot.send_message(message.chat.id, "🤖 Assalomu alaykum! Botimizga xush kelibsiz!\nQuyidagi xizmatlardan birini tanlang 👇", reply_markup=kb)
+    bot.send_message(
+        message.chat.id,
+        "🤖 <b>Assalomu alaykum!</b>\nBotimizga xush kelibsiz!\nQuyidagi xizmatlardan birini tanlang 👇",
+        parse_mode="HTML",
+        reply_markup=kb
+    )
 
 # === Xizmat tanlash ===
 @bot.callback_query_handler(func=lambda c: c.data.startswith("service:"))
@@ -113,24 +122,21 @@ def send_payment_info(chat_id, service_code, amount_int, tariff_name):
 def handle_paid(call):
     _, service_code, amount_raw, tariff_name = call.data.split(":")
     amount_int = int(amount_raw)
-    kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("📨 Chekni yubordim", callback_data=f"checksent:{service_code}:{amount_int}:{tariff_name}"))
     bot.send_message(
         call.message.chat.id,
-        "📸 Iltimos, to‘lov chekingizni shu yerga yuboring (rasm sifatida).",
+        "📸 Iltimos, to‘lov chekingizni shu yerga yuboring (rasm sifatida)."
     )
-
-    bot.register_next_step_handler(call.message, process_check_photo, service_code, amount_int, tariff_name, kb)
+    bot.register_next_step_handler(call.message, process_check_photo, service_code, amount_int, tariff_name)
 
 # === Chek rasm yuborish ===
-def process_check_photo(message, service_code, amount_int, tariff_name, kb):
+def process_check_photo(message, service_code, amount_int, tariff_name):
     if not message.photo:
         bot.send_message(message.chat.id, "❌ Iltimos, rasm yuboring!")
-        bot.register_next_step_handler(message, process_check_photo, service_code, amount_int, tariff_name, kb)
+        bot.register_next_step_handler(message, process_check_photo, service_code, amount_int, tariff_name)
         return
 
     file_id = message.photo[-1].file_id
-    bot.send_message(message.chat.id, "✅ Rahmat! Endi '📨 Chekni yubordim' tugmasini bosing.", reply_markup=kb)
+    bot.send_message(message.chat.id, "✅ Rahmat! Chekingiz yuborildi, maʼlumot tekshirilmoqda.")
 
     # Chekni admin'ga yuborish
     bot.send_photo(
@@ -144,11 +150,6 @@ def process_check_photo(message, service_code, amount_int, tariff_name, kb):
             f"👤 Foydalanuvchi: @{message.from_user.username or '—'} (id: {message.from_user.id})"
         ),
     )
-
-# === "📨 Chekni yubordim" ===
-@bot.callback_query_handler(func=lambda c: c.data.startswith("checksent:"))
-def handle_check_sent(call):
-    bot.send_message(call.message.chat.id, "✅ Chek yuborilgan. Maʼlumotlaringiz tekshirilmoqda. Rahmat!")
 
 # === Run ===
 print("🤖 Bot Railway’da ishga tushdi...")
