@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 # === Sozlamalar ===
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Token Railway Variables orqali olinadi
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # Railway Variables orqali olinadi
 ADMIN_ID = 6234736126
 CARD_NUMBER = "9860 1678 2074 3752"
 CARD_OWNER = "I. TORAXON"
@@ -122,35 +122,60 @@ def send_payment_info(chat_id, service_code, amount_int, tariff_name):
 def handle_paid(call):
     _, service_code, amount_raw, tariff_name = call.data.split(":")
     amount_int = int(amount_raw)
+
+    kb = InlineKeyboardMarkup()
+    kb.add(InlineKeyboardButton("📤 Chekni yubordim", callback_data=f"sendcheck:{service_code}:{amount_int}:{tariff_name}"))
+
     bot.send_message(
+        call.message.chat.id,
+        "💰 To‘lovni amalga oshirgach, endi chekni yuborishingiz kerak.\n\n"
+        "👇 Quyidagi tugmani bosing va chek rasmni yuboring:",
+        reply_markup=kb
+    )
+
+# === "Chekni yubordim" tugmasi ===
+@bot.callback_query_handler(func=lambda c: c.data.startswith("sendcheck:"))
+def handle_send_check(call):
+    _, service_code, amount_raw, tariff_name = call.data.split(":")
+    amount_int = int(amount_raw)
+
+    msg = bot.send_message(
         call.message.chat.id,
         "📸 Iltimos, to‘lov chekingizni shu yerga yuboring (rasm sifatida)."
     )
-    bot.register_next_step_handler(call.message, process_check_photo, service_code, amount_int, tariff_name)
+    bot.register_next_step_handler(msg, process_check_photo, service_code, amount_int, tariff_name)
 
 # === Chek rasm yuborish ===
 def process_check_photo(message, service_code, amount_int, tariff_name):
     if not message.photo:
         bot.send_message(message.chat.id, "❌ Iltimos, rasm yuboring!")
-        bot.register_next_step_handler(message, process_check_photo, service_code, amount_int, tariff_name)
+        msg = bot.send_message(message.chat.id, "📸 Chek rasmini yuboring:")
+        bot.register_next_step_handler(msg, process_check_photo, service_code, amount_int, tariff_name)
         return
 
+    user = message.from_user
     file_id = message.photo[-1].file_id
+    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Ism kiritilmagan"
+    username = f"@{user.username}" if user.username else "Username yo‘q"
+    profile_link = f"<a href='tg://user?id={user.id}'>Profilga o‘tish</a>"
+
     bot.send_message(message.chat.id, "✅ Rahmat! Chekingiz yuborildi, maʼlumot tekshirilmoqda.")
 
     # Chekni admin'ga yuborish
-    bot.send_photo(
-        ADMIN_ID,
-        file_id,
-        caption=(
-            f"📩 Yangi to‘lov!\n\n"
-            f"🔹 Xizmat: {SERVICES[service_code]['name']}\n"
-            f"📦 Tarif: {tariff_name}\n"
-            f"💵 Summasi: {format_amount(amount_int)}\n\n"
-            f"👤 Foydalanuvchi: @{message.from_user.username or '—'} (id: {message.from_user.id})"
-        ),
+    caption = (
+        f"📩 <b>Yangi to‘lov!</b>\n\n"
+        f"🔹 Xizmat: {SERVICES[service_code]['name']}\n"
+        f"📦 Tarif: {tariff_name}\n"
+        f"💵 Summasi: {format_amount(amount_int)}\n\n"
+        f"👤 <b>Foydalanuvchi ma’lumotlari:</b>\n"
+        f"🪪 ID: <code>{user.id}</code>\n"
+        f"👤 Ism: {full_name}\n"
+        f"🔗 Username: {username}\n"
+        f"📱 {profile_link}"
     )
+
+    bot.send_photo(ADMIN_ID, file_id, caption=caption, parse_mode="HTML")
 
 # === Run ===
 print("🤖 Bot Railway’da ishga tushdi...")
-bot.infinity_polling(skip_pending=True)
+bot.infinity_polling(timeout=60, long_polling_timeout=30)
