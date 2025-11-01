@@ -3,7 +3,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
 
 # === Sozlamalar ===
-BOT_TOKEN = "8114837659:AAHYY_MbvGE2J_ps7M98MmYVljBCNJavGVE"
+BOT_TOKEN = "8114837659:"
 ADMIN_ID = 6234736126
 CARD_NUMBER = "9860 1678 2074 3752"
 CARD_OWNER = "I. TORAXON"
