@@ -4,15 +4,15 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import re
 import logging
 
-# === Log sozlamalari (Railway loglarda ko‘rinishi uchun) ===
+# === Log sozlamalari ===
 logging.basicConfig(level=logging.INFO)
 
 # === Sozlamalar ===
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # Railway Variables orqali olinadi
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 6234736126
 CARD_NUMBER = "9860 1678 2074 3752"
 CARD_OWNER = "I. TORAXON"
-CHANNEL_USERNAME = "@premum_uc_hizmati"
+CHANNEL_USERNAME = "premum_uc_hizmati"  # ❗ E'TIBOR: @ belgisisiz!
 
 # === Xizmatlar ===
 SERVICES = {
@@ -36,64 +36,78 @@ SERVICES = {
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# === Helper funksiyalar ===
+# === Foydali funksiya ===
 def format_amount(amount_int):
     return f"{amount_int:,}".replace(",", " ") + " so'm"
-
-def parse_amount(text):
-    cleaned = re.sub(r"[^\d]", "", text or "")
-    if not cleaned:
-        return None
-    try:
-        val = int(cleaned)
-        if val > 0:
-            return val
-    except:
-        return None
-    return None
 
 # === Kanalga obuna tekshiruvi ===
 def check_subscription(user_id):
     try:
-        member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        return member.status in ["member", "creator", "administrator"]
-    except Exception:
+        member = bot.get_chat_member(f"@{CHANNEL_USERNAME}", user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logging.warning(f"Obuna tekshiruvida xatolik: {e}")
         return False
 
 # === Start buyrug‘i ===
 @bot.message_handler(commands=["start"])
 def start(message):
-    if not check_subscription(message.from_user.id):
+    user_id = message.from_user.id
+
+    if not check_subscription(user_id):
         kb = InlineKeyboardMarkup()
-        kb.add(InlineKeyboardButton("📢 Kanalga obuna bo‘lish", url=f"https://t.me/{CHANNEL_USERNAME[1:]}"))
+        kb.add(InlineKeyboardButton("📢 Kanalga obuna bo‘lish", url=f"https://t.me/{CHANNEL_USERNAME}"))
+        kb.add(InlineKeyboardButton("✅ Obuna bo‘ldim", callback_data="check_sub"))
         bot.send_message(
             message.chat.id,
-            f"👋 Assalomu alaykum! Botdan foydalanish uchun avval {CHANNEL_USERNAME} kanaliga obuna bo‘ling!",
-            reply_markup=kb,
+            f"👋 Assalomu alaykum!\nBotdan foydalanish uchun avval kanalga obuna bo‘ling 👇\n\n🔗 @{CHANNEL_USERNAME}",
+            reply_markup=kb
         )
         return
 
+    show_services_menu(message.chat.id)
+
+# === Obuna bo‘ldim tugmasi ===
+@bot.callback_query_handler(func=lambda c: c.data == "check_sub")
+def recheck_subscription(call):
+    if check_subscription(call.from_user.id):
+        bot.answer_callback_query(call.id, "✅ Obuna tasdiqlandi!")
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        show_services_menu(call.message.chat.id)
+    else:
+        bot.answer_callback_query(call.id, "❌ Hali obuna bo‘lmagansiz!")
+
+# === Xizmatlar menyusi ===
+def show_services_menu(chat_id):
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("⭐ Telegram Premium", callback_data="service:premium"))
     kb.add(InlineKeyboardButton("✨ Telegram Stars", callback_data="service:stars"))
     kb.add(InlineKeyboardButton("💎 Mobile Legends", callback_data="service:mlbb"))
     kb.add(InlineKeyboardButton("🎮 PUBG UC", callback_data="service:uc"))
-    bot.send_message(
-        message.chat.id,
-        "🤖 <b>Assalomu alaykum!</b>\nBotimizga xush kelibsiz!\nQuyidagi xizmatlardan birini tanlang 👇",
-        parse_mode="HTML",
-        reply_markup=kb
+
+    text = (
+        "🤖 <b>Assalomu alaykum!</b>\n"
+        "⭐ Telegram Premium va boshqa xizmatlar botiga xush kelibsiz!\n\n"
+        "Quyidagi xizmatlardan birini tanlang 👇"
     )
+    bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=kb)
 
 # === Xizmat tanlash ===
 @bot.callback_query_handler(func=lambda c: c.data.startswith("service:"))
 def handle_service(call):
     service_code = call.data.split(":")[1]
     service = SERVICES[service_code]
+
     kb = InlineKeyboardMarkup()
     for tariff, price in service["tariffs"].items():
         kb.add(InlineKeyboardButton(f"{tariff} - {format_amount(price)}", callback_data=f"tariff:{service_code}:{tariff}:{price}"))
-    bot.send_message(call.message.chat.id, f"{service['name']} uchun tarifni tanlang 👇", reply_markup=kb)
+
+    bot.edit_message_text(
+        f"{service['name']} uchun tarifni tanlang 👇",
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        reply_markup=kb
+    )
 
 # === Tarif tanlandi ===
 @bot.callback_query_handler(func=lambda c: c.data.startswith("tariff:"))
@@ -124,28 +138,23 @@ def handle_paid(call):
     amount_int = int(amount_raw)
 
     kb = InlineKeyboardMarkup()
-    kb.add(InlineKeyboardButton("📤 Chekni yubordim", callback_data=f"sendcheck:{service_code}:{amount_int}:{tariff_name}"))
+    kb.add(InlineKeyboardButton("📤 Chekni yuboraman", callback_data=f"sendcheck:{service_code}:{amount_int}:{tariff_name}"))
 
     bot.send_message(
         call.message.chat.id,
-        "💰 To‘lovni amalga oshirgach, endi chekni yuborishingiz kerak.\n\n"
-        "👇 Quyidagi tugmani bosing va chek rasmni yuboring:",
+        "💰 To‘lovni amalga oshirgach, endi chekni yuborishingiz kerak.\n\n👇 Quyidagi tugmani bosing:",
         reply_markup=kb
     )
 
-# === "Chekni yubordim" tugmasi ===
+# === "Chekni yuboraman" ===
 @bot.callback_query_handler(func=lambda c: c.data.startswith("sendcheck:"))
 def handle_send_check(call):
     _, service_code, amount_raw, tariff_name = call.data.split(":")
     amount_int = int(amount_raw)
-
-    msg = bot.send_message(
-        call.message.chat.id,
-        "📸 Iltimos, to‘lov chekingizni shu yerga yuboring (rasm sifatida)."
-    )
+    msg = bot.send_message(call.message.chat.id, "📸 Iltimos, to‘lov chekingizni shu yerga yuboring (rasm sifatida).")
     bot.register_next_step_handler(msg, process_check_photo, service_code, amount_int, tariff_name)
 
-# === Chek rasm yuborish ===
+# === Chek yuborish ===
 def process_check_photo(message, service_code, amount_int, tariff_name):
     if not message.photo:
         bot.send_message(message.chat.id, "❌ Iltimos, rasm yuboring!")
@@ -161,7 +170,6 @@ def process_check_photo(message, service_code, amount_int, tariff_name):
 
     bot.send_message(message.chat.id, "✅ Rahmat! Chekingiz yuborildi, maʼlumot tekshirilmoqda.")
 
-    # Chekni admin'ga yuborish
     caption = (
         f"📩 <b>Yangi to‘lov!</b>\n\n"
         f"🔹 Xizmat: {SERVICES[service_code]['name']}\n"
