@@ -1,20 +1,20 @@
+import os
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import logging
 from flask import Flask, request
-import os
+import logging
 
 # === Sozlamalar ===
-BOT_TOKEN = "8114837659:AAHYY_MbvGE2J_ps7M98MmYVljBCNJavGVE"  # ✅ Sizning tokeningiz
+BOT_TOKEN = "8114837659:AAHYY_MbvGE2J_ps7M98MmYVljBCNJavGVE"
 ADMIN_ID = 6234736126
 CHANNEL_USERNAME = "premum_uc_hizmati"  # @ belgisisiz
 CARD_NUMBER = "9860 1678 2074 3752"
 CARD_OWNER = "I. TORAXON"
 
-# === Log ===
-logging.basicConfig(level=logging.INFO)
-bot = telebot.TeleBot(BOT_TOKEN)
+# === Flask va Telebot sozlamalari ===
 app = Flask(__name__)
+bot = telebot.TeleBot(BOT_TOKEN)
+logging.basicConfig(level=logging.INFO)
 
 # === Xizmatlar ===
 SERVICES = {
@@ -146,32 +146,19 @@ def handle_tariff(call):
 @bot.callback_query_handler(func=lambda c: c.data.startswith("paid:"))
 def handle_paid(call):
     _, service_code, tariff_name, price = call.data.split(":")
-    bot.send_message(
-        call.message.chat.id,
-        "📸 Endi to‘lov chekingizni yuboring (rasm shaklida)."
-    )
-    bot.register_next_step_handler(
-        call.message,
-        lambda msg: receive_check(msg, service_code, tariff_name, price)
-    )
+    bot.send_message(call.message.chat.id, "📸 Endi to‘lov chekingizni yuboring (rasm shaklida).")
+    bot.register_next_step_handler(call.message, lambda msg: receive_check(msg, service_code, tariff_name, price))
 
 
 def receive_check(message, service_code, tariff_name, price):
     if not message.photo:
         bot.send_message(message.chat.id, "❗ Iltimos, chekni rasm shaklida yuboring.")
         return
-
     photo_id = message.photo[-1].file_id
-
     kb = InlineKeyboardMarkup()
     kb.add(InlineKeyboardButton("✅ Chekni tashladim",
                                 callback_data=f"checksent:{service_code}:{tariff_name}:{price}:{photo_id}"))
-
-    bot.send_message(
-        message.chat.id,
-        "✅ Agar chek to‘liq yuklangan bo‘lsa, pastdagi tugmani bosing 👇",
-        reply_markup=kb
-    )
+    bot.send_message(message.chat.id, "✅ Agar chek to‘liq yuklangan bo‘lsa, pastdagi tugmani bosing 👇", reply_markup=kb)
 
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("checksent:"))
@@ -205,7 +192,6 @@ def handle_check_sent(call):
 def admin_decision(call):
     action, user_id, service_code, tariff_name, price = call.data.split(":")
     user_id = int(user_id)
-
     if action == "approve":
         bot.send_message(
             user_id,
@@ -231,20 +217,22 @@ def back_to_menu(call):
     show_services_menu(call.message.chat.id)
 
 
-# === WEBHOOK QISMI (Railway uchun zarur) ===
+# === Railway uchun Webhook ===
 @app.route('/' + BOT_TOKEN, methods=['POST'])
-def getMessage():
-    json_str = request.get_data().decode('UTF-8')
-    update = telebot.types.Update.de_json(json_str)
+def webhook_update():
+    update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
     bot.process_new_updates([update])
-    return '!', 200
+    return 'OK', 200
 
 
-@app.route("/")
-def webhook():
+@app.route('/')
+def index():
     bot.remove_webhook()
-    bot.set_webhook(url=f"https://{os.getenv('RAILWAY_URL')}/{BOT_TOKEN}")
-    return "✅ Bot ishga tushdi!", 200
+    full_url = f"https://{os.getenv('RAILWAY_STATIC_URL', os.getenv('RAILWAY_URL'))}/{BOT_TOKEN}"
+    bot.set_webhook(url=full_url)
+    return f"✅ Webhook o‘rnatildi: {full_url}", 200
 
 
-print("✅ Bot ishga tushdi (Webhook bilan)...")
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host="0.0.0.0", port=port)
