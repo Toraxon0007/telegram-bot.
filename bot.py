@@ -1,9 +1,11 @@
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
+from flask import Flask, request
+import os
 
 # === Sozlamalar ===
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # <-- Bot tokeningizni shu joyga yozing
+BOT_TOKEN = "8114837659:AAHYY_MbvGE2J_ps7M98MmYVljBCNJavGVE"  # ✅ Sizning tokeningiz
 ADMIN_ID = 6234736126
 CHANNEL_USERNAME = "premum_uc_hizmati"  # @ belgisisiz
 CARD_NUMBER = "9860 1678 2074 3752"
@@ -12,6 +14,7 @@ CARD_OWNER = "I. TORAXON"
 # === Log ===
 logging.basicConfig(level=logging.INFO)
 bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
 
 # === Xizmatlar ===
 SERVICES = {
@@ -198,43 +201,26 @@ def handle_check_sent(call):
     bot.answer_callback_query(call.id, "✅ Chek yuborildi!")
 
 
-# === ADMIN QARORI ===
 @bot.callback_query_handler(func=lambda c: c.data.startswith("approve:") or c.data.startswith("reject:"))
 def admin_decision(call):
     action, user_id, service_code, tariff_name, price = call.data.split(":")
     user_id = int(user_id)
 
     if action == "approve":
-        # ✅ Admin tasdiqladi — foydalanuvchiga xizmat bajarilgan deb yuboriladi
         bot.send_message(
             user_id,
-            f"✅ <b>Xizmat bajarildi!</b>\nSizning to‘lovingiz tasdiqlandi va xizmat yakunlandi.\n\n"
+            f"✅ <b>Xizmat bajarildi!</b>\nSizning to‘lovingiz tasdiqlandi.\n\n"
             f"📦 Xizmat: {SERVICES[service_code]['name']}\n"
             f"📅 Tarif: {tariff_name}\n"
             f"💵 Narx: {format_amount(int(price))}\n\n"
             f"🙏 Rahmat ishonchingiz uchun!",
             parse_mode="HTML"
         )
-
-        bot.edit_message_caption(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            caption=f"✅ <b>To‘lov tasdiqlandi va xizmat bajarildi.</b>\n{call.message.caption}",
-            parse_mode="HTML"
-        )
         bot.answer_callback_query(call.id, "✅ Tasdiqlandi!")
-
     else:
-        # ❌ Admin rad etdi
         bot.send_message(
             user_id,
             f"❌ <b>To‘lov rad etildi.</b>\nIltimos, to‘lov ma’lumotlarini qayta tekshirib, to‘g‘ri chek yuboring.",
-            parse_mode="HTML"
-        )
-        bot.edit_message_caption(
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            caption=f"❌ <b>To‘lov rad etildi.</b>\n{call.message.caption}",
             parse_mode="HTML"
         )
         bot.answer_callback_query(call.id, "❌ Rad etildi!")
@@ -245,5 +231,20 @@ def back_to_menu(call):
     show_services_menu(call.message.chat.id)
 
 
-print("✅ Bot ishga tushdi...")
-bot.infinity_polling()
+# === WEBHOOK QISMI (Railway uchun zarur) ===
+@app.route('/' + BOT_TOKEN, methods=['POST'])
+def getMessage():
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return '!', 200
+
+
+@app.route("/")
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://{os.getenv('RAILWAY_URL')}/{BOT_TOKEN}")
+    return "✅ Bot ishga tushdi!", 200
+
+
+print("✅ Bot ishga tushdi (Webhook bilan)...")
