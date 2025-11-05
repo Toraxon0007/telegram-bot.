@@ -5,13 +5,13 @@ from flask import Flask, request
 import logging
 
 # === Sozlamalar ===
-BOT_TOKEN = "8114837659:AAHYY_MbvGE2J_ps7M98MmYVljBCNJavGVE"
-ADMIN_ID = 6234736126
-CHANNEL_USERNAME = "premum_uc_hizmati"  # @ belgisisiz
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8114837659:AAHYY_MbvGE2J_ps7M98MmYVljBCNJavGVE")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 6234736126))
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "premum_uc_hizmati")
 CARD_NUMBER = "9860 1678 2074 3752"
 CARD_OWNER = "I. TORAXON"
 
-# === Flask va Telebot sozlamalari ===
+# === Flask va Telebot ===
 app = Flask(__name__)
 bot = telebot.TeleBot(BOT_TOKEN)
 logging.basicConfig(level=logging.INFO)
@@ -228,11 +228,14 @@ def webhook_update():
 @app.route('/')
 def index():
     bot.remove_webhook()
-    full_url = f"https://{os.getenv('RAILWAY_STATIC_URL', os.getenv('RAILWAY_URL'))}/{BOT_TOKEN}"
+    base_url = os.getenv("RAILWAY_URL")
+    if not base_url:
+        return "❌ RAILWAY_URL topilmadi", 500
+    full_url = f"{base_url}/{BOT_TOKEN}"
     bot.set_webhook(url=full_url)
     return f"✅ Webhook o‘rnatildi: {full_url}", 200
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
